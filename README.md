@@ -16,11 +16,13 @@ URL options: `?t=08:30` starts the clock at 08:30, and `?paused` starts paused. 
 
 ## Export a video
 
-Open [http://localhost:5173/?video](http://localhost:5173/?video) and press **Export video**. The page shows the loop as it will be saved. The file is a greyscale top-down view of Toronto, H.264 MP4, 1920 × 1080 at 30 fps, with about 33 minutes of the day per second. Only the time and "bike share rides" appear on it. Export needs a browser with WebCodecs (current Chrome, Edge or Safari).
+Open [http://localhost:5173/?video](http://localhost:5173/?video) and press **Export video**. The page shows the loop as it will be saved. The file is a greyscale top-down view of Toronto, H.264 MP4, 1920 × 1080 at 30 fps, with about 33 minutes of the day per second. Only the time and "bike share rides" appear on it. Export needs a browser with WebCodecs (current Chrome, Edge or Safari). Add `&speed=1.2` to any video URL to play the day that much faster.
 
 The loop runs 04:00 to 04:00, the quietest time of day, and rides that cross the join wrap around. Tails are shorter around downtown so rides stay distinct there. Size, framing, speed, bitrate and tail lengths are constants at the top of [src/videoFrames.ts](src/videoFrames.ts).
 
 For a 2017 vs 2026 side-by-side on one map and clock, open [http://localhost:5173/?compare](http://localhost:5173/?compare). It compares Thursday, August 10, 2017 with Thursday, August 13, 2026.
+
+Two more versions add a running total for the day: `?co2` (estimated CO₂ saved) and `?prompts` (the same saving as a number of AI prompts). [docs/co2-and-ai-prompts.md](docs/co2-and-ai-prompts.md) explains the estimate and its sources; the assumptions are constants in [src/videoFrames.ts](src/videoFrames.ts).
 
 The video has no credit line, so credit the map and data wherever you post it: © OpenStreetMap contributors, © CARTO, City of Toronto Open Data.
 

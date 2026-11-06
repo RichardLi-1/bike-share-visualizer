@@ -21,6 +21,7 @@ export type Trip = {
   timestamps: Float32Array
   start: number
   end: number
+  metres: number
   casual: boolean
   ebike: boolean
 }
@@ -51,7 +52,7 @@ export async function loadDay(url: string): Promise<Day> {
       const f = total > 0 ? d[i] / total : i / (d.length - 1)
       timestamps[i] = start + (end - start) * f
     }
-    return { path: file.routes[r], timestamps, start, end, casual: casual === 1, ebike: ebike === 1 }
+    return { path: file.routes[r], timestamps, start, end, metres: total, casual: casual === 1, ebike: ebike === 1 }
   })
 
   const diff = new Int32Array(MINUTES + 1)
