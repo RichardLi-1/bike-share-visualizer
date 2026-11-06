@@ -1,0 +1,47 @@
+.video-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  height: 100%;
+  padding: 16px;
+  background: #0a0a0a;
+  color: #bbb;
+  font-size: 13px;
+}
+
+.video-page canvas {
+  max-width: 100%;
+  min-height: 0;
+  object-fit: contain;
+}
+
+.video-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.video-bar button {
+  min-width: 124px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 6px;
+  background: #e6e6e6;
+  color: #111;
+  font: inherit;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.video-bar button:disabled {
+  background: #555;
+  color: #ccc;
+  cursor: default;
+}
+
+.video-bar small {
+  color: #777;
+}
