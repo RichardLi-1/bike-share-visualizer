@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   buildScene,
+  CO2,
   COMPARE,
   drawFrame,
   encodeVideo,
   FPS,
   FRAME_COUNT,
   HEIGHT,
+  PROMPTS,
   SINGLE,
   WIDTH,
   type Scene,
@@ -14,7 +16,9 @@ import {
 import './VideoApp.css'
 
 // Started here, not in an effect, so StrictMode doesn't render the basemap twice.
-const scenePromise = buildScene(new URLSearchParams(window.location.search).has('compare') ? COMPARE : SINGLE)
+const params = new URLSearchParams(window.location.search)
+const layout = params.has('compare') ? COMPARE : params.has('co2') ? CO2 : params.has('prompts') ? PROMPTS : SINGLE
+const scenePromise = buildScene(layout)
 
 export default function VideoApp() {
   const canvas = useRef<HTMLCanvasElement>(null)
