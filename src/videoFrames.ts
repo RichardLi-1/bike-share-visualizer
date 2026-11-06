@@ -19,6 +19,7 @@ export type Layout = {
   center: [number, number]
   zoom: number
   lineWidth: number
+  metric?: 'co2' | 'prompts'
 }
 
 export const SINGLE: Layout = {
@@ -40,13 +41,25 @@ export const COMPARE: Layout = {
   zoom: 11.72,
   lineWidth: 1.3,
 }
+export const CO2: Layout = { ...SINGLE, file: 'bike-share-rides-co2-saved.mp4', metric: 'co2' }
+export const PROMPTS: Layout = { ...SINGLE, file: 'bike-share-rides-ai-prompts.mp4', metric: 'prompts' }
+
 const BEARING = -17
+
+// Sources and ranges for these are in docs/co2-and-ai-prompts.md.
+const CAR_TRIP_SHARE = 0.17
+const CAR_GRAMS_PER_KM = 205
+const EBIKE_KWH_PER_KM = 0.012
+const GRID_GRAMS_PER_KWH = 73.8
+const GRAMS_PER_AI_PROMPT = 0.1
 
 const DAY_SECONDS = 24 * 3600
 // The loop joins at the quietest time of day, so the restart is hard to see.
 const LOOP_START = 4 * 3600
 // About 66 simulated seconds per frame, or 33 minutes of the day per second at 30 fps.
-export const FRAME_COUNT = 1309
+// ?speed=1.2 plays the day that much faster.
+const SPEED = Number(new URLSearchParams(window.location.search).get('speed')) || 1
+export const FRAME_COUNT = Math.round(1309 / SPEED)
 const SECONDS_PER_FRAME = DAY_SECONDS / FRAME_COUNT
 
 // Tails shorten towards downtown so rides stay distinct where they concentrate.
@@ -59,13 +72,15 @@ const DOWNTOWN_OUTER_PX = 560
 // Trail opacity from its oldest slice to its newest.
 const TRAIL_FADE = [0.06, 0.12, 0.2, 0.32, 0.5, 0.85]
 
-type Ride = { xy: Float32Array; times: Float32Array; start: number; end: number }
+type Ride = { xy: Float32Array; times: Float32Array; start: number; end: number; gramsSaved: number }
 
 export type Scene = {
   layout: Layout
   base: HTMLCanvasElement
   panels: { label?: string; rides: Ride[] }[]
   downtown: [number, number]
+  /** Grams of CO2 saved by the end of each frame. */
+  savedByFrame: Float64Array
 }
 
 async function renderBasemap({ center, zoom, panels }: Layout) {
@@ -121,26 +136,62 @@ export async function buildScene(layout: Layout): Promise<Scene> {
         }
         projected.set(trip.path, xy)
       }
-      return { xy, times: trip.timestamps, start: trip.start, end: trip.end }
+      const km = trip.metres / 1000
+      const charging = trip.ebike ? km * EBIKE_KWH_PER_KM * GRID_GRAMS_PER_KWH : 0
+      const gramsSaved = km * CAR_TRIP_SHARE * CAR_GRAMS_PER_KM - charging
+      return { xy, times: trip.timestamps, start: trip.start, end: trip.end, gramsSaved }
     })
     return { label: layout.panels[i].label, rides }
   })
   const { x, y } = map.project(DOWNTOWN)
   map.remove()
   host.remove()
-  return { layout, base, panels, downtown: [x, y] }
+  return { layout, base, panels, downtown: [x, y], savedByFrame: savedByFrame(panels[0].rides) }
 }
 
-/** Canvas text has no tabular numerals, so each digit gets a fixed-width cell to stop the clock jittering. */
-function drawClock(ctx: CanvasRenderingContext2D, text: string, x: number, y: number) {
+/** Spreads each ride's saving over the frames it is moving in, then totals them through the loop. */
+function savedByFrame(rides: Ride[]) {
+  const saved = new Float64Array(FRAME_COUNT)
+  for (const ride of rides) {
+    for (const dayStart of [0, DAY_SECONDS]) {
+      const from = Math.max(ride.start + dayStart, LOOP_START) - LOOP_START
+      const to = Math.min(ride.end + dayStart, LOOP_START + DAY_SECONDS) - LOOP_START
+      for (let f = Math.floor(from / SECONDS_PER_FRAME); from < to && f * SECONDS_PER_FRAME < to; f++) {
+        const overlap = Math.min(to, (f + 1) * SECONDS_PER_FRAME) - Math.max(from, f * SECONDS_PER_FRAME)
+        saved[f] += (ride.gramsSaved * overlap) / (ride.end - ride.start)
+      }
+    }
+  }
+  for (let f = 1; f < FRAME_COUNT; f++) saved[f] += saved[f - 1]
+  return saved
+}
+
+/** Canvas text has no tabular numerals, so each digit gets a fixed-width cell to stop numbers jittering. */
+function drawDigits(ctx: CanvasRenderingContext2D, text: string, x: number, y: number) {
   const digit = Math.max(...[...'0123456789'].map((d) => ctx.measureText(d).width))
   ctx.textAlign = 'center'
   for (const char of text) {
-    const width = char === ':' ? ctx.measureText(char).width : digit
+    const width = /\d/.test(char) ? digit : ctx.measureText(char).width
     ctx.fillText(char, x + width / 2, y)
     x += width
   }
   ctx.textAlign = 'start'
+  return x
+}
+
+function drawMetric(ctx: CanvasRenderingContext2D, scene: Scene, frame: number, x: number, y: number) {
+  const grams = scene.savedByFrame[frame]
+  const [before, value, after] =
+    scene.layout.metric === 'co2'
+      ? ['saved an estimated ', Math.round(grams / 10_000) * 10, ' kg of CO₂']
+      : [
+          'saved the equivalent of ',
+          Math.round(grams / GRAMS_PER_AI_PROMPT / 10_000) * 10_000,
+          ' average AI prompts of environmental impact',
+        ]
+  ctx.fillText(before, x, y)
+  x = drawDigits(ctx, value.toLocaleString('en-US'), x + ctx.measureText(before).width, y)
+  ctx.fillText(after, x, y)
 }
 
 function pointAt({ xy, times }: Ride, i: number, t: number): [number, number] {
@@ -231,10 +282,12 @@ export function drawFrame(ctx: CanvasRenderingContext2D, scene: Scene, frame: nu
     ctx.fillStyle = '#fff'
   }
 
+  const lift = scene.layout.metric ? 46 : 0
   ctx.font = font('600 76px')
-  drawClock(ctx, formatClock(time), 48, HEIGHT - 92)
+  drawDigits(ctx, formatClock(time), 48, HEIGHT - 92 - lift)
   ctx.font = font('400 32px')
-  ctx.fillText('bike share rides', 50, HEIGHT - 46)
+  ctx.fillText('bike share rides', 50, HEIGHT - 46 - lift)
+  if (scene.layout.metric) drawMetric(ctx, scene, frame, 50, HEIGHT - 46)
 }
 
 export async function encodeVideo(scene: Scene, onProgress: (done: number) => void) {
